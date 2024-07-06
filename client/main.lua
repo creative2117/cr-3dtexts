@@ -1,3 +1,6 @@
+local closestLocations = {}
+local isLooping = false
+
 local function DrawText3D(x, y, z, text)
     SetTextScale(0.35, 0.55)
     SetTextFont(4)
@@ -6,38 +9,58 @@ local function DrawText3D(x, y, z, text)
     SetTextEntry('STRING')
     SetTextCentre(true)
     AddTextComponentString(text)
-    SetDrawOrigin(x,y,z, 0)
+    SetDrawOrigin(x, y, z, 0)
     DrawText(0.0, 0.0)
     local factor = (string.len(text)) / 370
     --DrawRect(0.0, 0.0+0.1525, 0.017+ factor, 0.03, 0, 0, 0, 75)
     ClearDrawOrigin()
 end
 
-CreateThread(function()
-    while true do
-        sleep = 1000
-        
-        local PlayerPed = PlayerPedId()
-        local PlayerPos = GetEntityCoords(PlayerPed)
-        local inRange = false
+local function addToClosestLocations(k, coords)
+    
+    for index, _ in pairs(closestLocations) do
+        if closestLocations[index] == k then return end
+    end
+    table.insert(closestLocations, { index = k, coords = coords })
+    loop()
+end
 
-        for k, v in pairs(Config.Texts) do
-            local coords = vector3(Config.Texts[k].Coords.x, Config.Texts[k].Coords.y, Config.Texts[k].Coords.z)
-            local dist = #(PlayerPos - coords)
-            if dist < Config.Texts[k].dist * 2 then
-                inRange = true
-                
-                if dist < Config.Texts[k].dist then
-                    DrawText3D(coords.x, coords.y, coords.z, Config.Texts[k].Text)
-                    
-                end
-            else
-                inRange = false
-            end
-            if inRange then
-                sleep = 3
-            end
+local function removeFromClosestLocation(k)
+    for index, _ in pairs(closestLocations) do
+        if closestLocations[index].index == k then
+            table.remove(closestLocations, k)
+            if not closestLocations[1] then isLooping = false end
+            break
         end
-        Wait(sleep)
+    end
+end
+
+CreateThread(function()
+    for k, _ in pairs(Config.Texts) do
+        local PolyZone = CircleZone:Create(Config.Texts[k].Coords, Config.Texts[k].dist, {
+            name = "location-"..k,
+            useZ = true,
+            debugPoly = false
+        })
+        PolyZone:onPlayerInOut(function(isPointInside)
+            if isPointInside then
+                addToClosestLocations(k, Config.Texts[k].Coords)
+            else
+                removeFromClosestLocation(k)
+            end
+        end)
     end
 end)
+
+function loop()
+    if isLooping then return end
+    isLooping = true
+    CreateThread(function()
+        while isLooping do   
+            for k, v in pairs(closestLocations) do
+                DrawText3D(closestLocations[k].coords.x, closestLocations[k].coords.y, closestLocations[k].coords.z, Config.Texts[closestLocations[k].index].Text)
+            end
+            Wait(3)
+        end
+    end)
+end
